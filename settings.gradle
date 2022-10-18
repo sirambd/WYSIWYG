@@ -1,2 +1,2 @@
 include ':app', ':wysiwyg'
-rootProject.name='WYSIWYG_Sample'
+rootProject.name = 'WYSIWYG_Sample'

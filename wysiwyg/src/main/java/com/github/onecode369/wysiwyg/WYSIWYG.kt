@@ -1,6 +1,5 @@
 package com.github.onecode369.wysiwyg
 
-import android.R
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.TypedArray
@@ -18,15 +17,20 @@ import java.io.UnsupportedEncodingException
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.util.*
-import kotlin.collections.ArrayList
+import android.R as AndroidR
 
-
-class WYSIWYG @SuppressLint("SetJavaScriptEnabled") constructor(
+class WYSIWYG constructor(
     context: Context,
     attrs: AttributeSet?,
     defStyleAttr: Int
-) :
-    WebView(context, attrs, defStyleAttr) {
+) : WebView(context, attrs, defStyleAttr) {
+
+    private var isReady = false
+    private var mContents: String? = null
+    private var mTextChangeListener: OnTextChangeListener? = null
+    private var mDecorationStateListener: OnDecorationStateListener? = null
+    private var mLoadListener: AfterInitialLoadListener? = null
+
     enum class Type {
         BOLD,
         ITALIC,
@@ -43,34 +47,25 @@ class WYSIWYG @SuppressLint("SetJavaScriptEnabled") constructor(
         JUSTIFYRIGHT
     }
 
+    constructor(context: Context)
+            : this(context, null)
 
-    interface OnTextChangeListener {
-        fun onTextChange(text: String?)
+    constructor(context: Context, attrs: AttributeSet?)
+            : this(context, attrs, AndroidR.attr.webViewStyle)
+
+    init {
+        applyAttributes(context, attrs)
     }
 
-    interface OnDecorationStateListener {
-        fun onStateChangeListener(
-            text: String?,
-            types: List<Type>?
-        )
-    }
+    @SuppressLint("SetJavaScriptEnabled")
+    fun init() {
+        isVerticalScrollBarEnabled = false
+        isHorizontalScrollBarEnabled = false
+        settings.javaScriptEnabled = true
+        webChromeClient = WebChromeClient()
+        webViewClient = createWebviewClient()
 
-    interface AfterInitialLoadListener {
-        fun onAfterInitialLoad(isReady: Boolean)
-    }
-
-    private var isReady = false
-    private var mContents: String? = null
-    private var mTextChangeListener: OnTextChangeListener? = null
-    private var mDecorationStateListener: OnDecorationStateListener? = null
-    private var mLoadListener: AfterInitialLoadListener? = null
-
-    constructor(context: Context) : this(context, null) {}
-    constructor(context: Context, attrs: AttributeSet?) : this(
-        context,
-        attrs,
-        R.attr.webViewStyle
-    ) {
+        loadUrl(SETUP_HTML)
     }
 
     protected fun createWebviewClient(): EditorWebViewClient {
@@ -112,12 +107,9 @@ class WYSIWYG @SuppressLint("SetJavaScriptEnabled") constructor(
     }
 
     private fun applyAttributes(context: Context, attrs: AttributeSet?) {
-        val attrsArray = intArrayOf(
-            R.attr.gravity
-        )
-        val ta: TypedArray = context.obtainStyledAttributes(attrs, attrsArray)
-        val gravity = ta.getInt(0, View.NO_ID)
-        when (gravity) {
+        val attrsArray = intArrayOf(AndroidR.attr.gravity)
+        val typedArray: TypedArray = context.obtainStyledAttributes(attrs, attrsArray)
+        when (typedArray.getInt(0, View.NO_ID)) {
             Gravity.LEFT -> exec("javascript:editor.setTextAlign(\"left\")")
             Gravity.RIGHT -> exec("javascript:editor.setTextAlign(\"right\")")
             Gravity.TOP -> exec("javascript:editor.setVerticalAlign(\"top\")")
@@ -129,25 +121,16 @@ class WYSIWYG @SuppressLint("SetJavaScriptEnabled") constructor(
                 exec("javascript:editor.setTextAlign(\"center\")")
             }
         }
-        ta.recycle()
+        typedArray.recycle()
     }
 
     // No handling
     var html: String?
         get() = mContents
-        set(contents) {
-            var contents = contents
-            if (contents == null) {
-                contents = ""
-            }
-            try {
-                exec(
-                    "javascript:editor.setHtml('" + URLEncoder.encode(
-                        contents,
-                        "UTF-8"
-                    ).toString() + "');"
-                )
-            } catch (e: UnsupportedEncodingException) { // No handling
+        set(value) {
+            val contents = value ?: ""
+            runCatching {
+                exec("javascript:editor.setHtml('${URLEncoder.encode(contents, "UTF-8")}');")
             }
             mContents = contents
         }
@@ -163,10 +146,7 @@ class WYSIWYG @SuppressLint("SetJavaScriptEnabled") constructor(
 
     override fun setPadding(left: Int, top: Int, right: Int, bottom: Int) {
         super.setPadding(left, top, right, bottom)
-        exec(
-            "javascript:editor.setPadding('" + left + "px', '" + top + "px', '" + right + "px', '" + bottom
-                    + "px');"
-        )
+        exec("javascript:editor.setPadding('${left}px', '${top}px', '${right}px', '${bottom}px');")
     }
 
     override fun setPaddingRelative(
@@ -339,21 +319,20 @@ class WYSIWYG @SuppressLint("SetJavaScriptEnabled") constructor(
     fun insertLatex(latexEquation: String) {
         var newS = ""
         for (i in 0..(latexEquation.length - 2)) {
-            if (latexEquation[i] == latexEquation[i + 1] && latexEquation[i] == ' ') {
-
-            } else if (latexEquation[i] == ' ') {
-                newS += ""
-            } else if (latexEquation[i] == '\n') {
-                newS += ""
-            } else if (latexEquation[i] == '\\') {
-                newS += "\\\\"
-            } else {
-                newS += latexEquation[i].toString()
+            when {
+                latexEquation[i] == latexEquation[i + 1] && latexEquation[i] == ' ' -> Unit
+                latexEquation[i] == ' ' -> newS += ""
+                latexEquation[i] == '\n' -> newS += ""
+                latexEquation[i] == '\\' -> newS += "\\\\"
+                else -> newS += latexEquation[i].toString()
             }
         }
-        if (latexEquation[latexEquation.length - 1] != ' ')
+
+        if (latexEquation[latexEquation.length - 1] != ' ') {
             newS += latexEquation[latexEquation.length - 1].toString()
-        exec("javascript:editor.insertLatex('" + newS + "');")
+        }
+
+        exec("javascript:editor.insertLatex('$newS');")
     }
 
     fun insertImage(url: String, alt: String) {
@@ -404,12 +383,8 @@ class WYSIWYG @SuppressLint("SetJavaScriptEnabled") constructor(
             }
         }
 
-        override fun shouldOverrideUrlLoading(
-            view: WebView,
-            url: String
-        ): Boolean {
-            val decode: String
-            decode = try {
+        override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
+            val decode: String = try {
                 URLDecoder.decode(url, "UTF-8")
             } catch (e: UnsupportedEncodingException) { // No handling
                 return false
@@ -425,21 +400,22 @@ class WYSIWYG @SuppressLint("SetJavaScriptEnabled") constructor(
         }
     }
 
+    interface OnTextChangeListener {
+        fun onTextChange(text: String?)
+    }
+
+    interface OnDecorationStateListener {
+        fun onStateChangeListener(text: String?, types: List<Type>?)
+    }
+
+    interface AfterInitialLoadListener {
+        fun onAfterInitialLoad(isReady: Boolean)
+    }
+
     companion object {
         private const val SETUP_HTML = "file:///android_asset/editor.html"
         private const val CALLBACK_SCHEME = "re-callback://"
         private const val STATE_SCHEME = "re-state://"
     }
 
-
-    init {
-        isVerticalScrollBarEnabled = false
-        isHorizontalScrollBarEnabled = false
-        settings.javaScriptEnabled = true
-        webChromeClient = WebChromeClient()
-        webViewClient = createWebviewClient()
-
-        loadUrl(SETUP_HTML)
-        applyAttributes(context, attrs)
-    }
 }
