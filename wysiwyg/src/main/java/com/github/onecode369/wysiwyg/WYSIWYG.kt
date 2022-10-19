@@ -31,6 +31,8 @@ class WYSIWYG constructor(
     private var mDecorationStateListener: OnDecorationStateListener? = null
     private var mLoadListener: AfterInitialLoadListener? = null
 
+    private var oldStateTypes: MutableList<Type> = mutableListOf()
+
     enum class Type {
         BOLD,
         ITALIC,
@@ -92,10 +94,8 @@ class WYSIWYG constructor(
     }
 
     private fun stateCheck(text: String) {
-        val state =
-            text.replaceFirst(STATE_SCHEME.toRegex(), "")
-                .toUpperCase(Locale.ENGLISH)
-        val types: MutableList<Type> = ArrayList()
+        val state = text.replaceFirst(STATE_SCHEME.toRegex(), "").uppercase(Locale.ENGLISH)
+        val types = mutableListOf<Type>()
         for (type in Type.values()) {
             if (TextUtils.indexOf(state, type.name) != -1) {
                 types.add(type)
@@ -103,6 +103,7 @@ class WYSIWYG constructor(
         }
         if (mDecorationStateListener != null) {
             mDecorationStateListener!!.onStateChangeListener(state, types)
+            oldStateTypes = types
         }
     }
 
