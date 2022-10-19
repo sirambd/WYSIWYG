@@ -331,9 +331,12 @@ editor.removeFormat = function() {
 // Event Listeners
 editor.editor.addEventListener("input", editor.callback);
 editor.editor.addEventListener("keyup", function(e) {
-    var KEY_LEFT = 37, KEY_RIGHT = 39;
+    var KEY_LEFT = 37, KEY_RIGHT = 39, BACKSPACE = 8, DELETE = 46;
+
     if (e.which == KEY_LEFT || e.which == KEY_RIGHT) {
         editor.enabledEditingItems(e);
+    } else if (e.which == BACKSPACE || e.which == DELETE) {
+        editor.callback();
     }
 });
 editor.editor.addEventListener("click", editor.enabledEditingItems);
